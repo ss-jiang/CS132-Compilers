@@ -1,0 +1,80 @@
+    Goal	::=	MainClass ( TypeDeclaration )* <EOF>
+    MainClass	::=	"class" Identifier "{" "public" "static" "void" "main" "(" "String" "[" "]" Identifier ")" "{" ( VarDeclaration )* ( Statement )* "}" "}"
+    TypeDeclaration	::=	ClassDeclaration
+    |	ClassExtendsDeclaration
+    ClassDeclaration	::=	"class" Identifier "{" ( VarDeclaration )* ( MethodDeclaration )* "}"
+    ClassExtendsDeclaration	::=	"class" Identifier "extends" Identifier "{" ( VarDeclaration )* ( MethodDeclaration )* "}"
+X    VarDeclaration	::=	Type Identifier ";"
+    MethodDeclaration	::=	"public" Type Identifier "(" ( FormalParameterList )? ")" "{" ( VarDeclaration )* ( Statement )* "return" Expression ";" "}"
+x    FormalParameterList	::=	FormalParameter ( FormalParameterRest )*
+x    FormalParameter	::=	Type Identifier
+x    FormalParameterRest	::=	"," FormalParameter
+X    Type	::=	ArrayType
+    |	BooleanType
+    |	IntegerType
+    |	Identifier
+x    ArrayType	::=	"int" "[" "]"
+x    BooleanType	::=	"boolean"
+x    IntegerType	::=	"int"
+x    Statement	::=	Block
+    |	AssignmentStatement
+    |	ArrayAssignmentStatement
+    |	IfStatement
+    |	WhileStatement
+    |	PrintStatement
+x    Block	::=	"{" ( Statement )* "}"
+x    AssignmentStatement	::=	Identifier "=" Expression ";"
+X    ArrayAssignmentStatement	::=	Identifier "[" Expression "]" "=" Expression ";"
+x    IfStatement	::=	"if" "(" Expression ")" Statement "else" Statement
+x    WhileStatement	::=	"while" "(" Expression ")" Statement
+x    PrintStatement	::=	"System.out.println" "(" Expression ")" ";"
+    Expression	::=	AndExpression
+    |	CompareExpression
+    |	PlusExpression
+    |	MinusExpression
+    |	TimesExpression
+    |	ArrayLookup
+    |	ArrayLength
+    |	MessageSend
+    |	PrimaryExpression
+x    AndExpression	::=	PrimaryExpression "&&" PrimaryExpression
+x    CompareExpression	::=	PrimaryExpression "<" PrimaryExpression
+x    PlusExpression	::=	PrimaryExpression "+" PrimaryExpression
+x    MinusExpression	::=	PrimaryExpression "-" PrimaryExpression
+x    TimesExpression	::=	PrimaryExpression "*" PrimaryExpression
+x    ArrayLookup	::=	PrimaryExpression "[" PrimaryExpression "]"
+x    ArrayLength	::=	PrimaryExpression "." "length"
+    MessageSend	::=	PrimaryExpression "." Identifier "(" ( ExpressionList )? ")"
+x    ExpressionList	::=	Expression ( ExpressionRest )*
+x    ExpressionRest	::=	"," Expression
+    PrimaryExpression	::=	IntegerLiteral
+    |	TrueLiteral
+    |	FalseLiteral
+    |	Identifier
+    |	ThisExpression
+    |	ArrayAllocationExpression
+    |	AllocationExpression
+    |	NotExpression
+    |	BracketExpression
+x    IntegerLiteral	::=	<INTEGER_LITERAL>
+x    TrueLiteral	::=	"true"
+x    FalseLiteral	::=	"false"
+x    Identifier	::=	<IDENTIFIER>
+    ThisExpression	::=	"this"
+x    ArrayAllocationExpression	::=	"new" "int" "[" Expression "]"
+    AllocationExpression	::=	"new" Identifier "(" ")"
+x    NotExpression	::=	"!" Expression
+x    BracketExpression	::=	"(" Expression ")"
+
+
+
+
+Type : boolean | array | int | <IDENTIFIER>
+Identifier : <IDENTIFIER>
+FormalParameterList : valid | invalid
+VarDeclaration : valid | invalid
+Statement : valid | invalid
+Expression : int | boolean | array | error
+
+FormalParameters -> locals
+Variables -> fields

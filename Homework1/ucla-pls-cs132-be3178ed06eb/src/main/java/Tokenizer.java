@@ -73,6 +73,11 @@ public class Tokenizer {
 		return patternsBuffer.toString().substring(1);
 	}
 
+
+	/* tokenize() function follows logic of this example:
+	 * https://docs.python.org/3/library/re.html#writing-a-tokenizer
+	 * as posted on piazza.
+	 */
 	public static ArrayList<Token> tokenize(String s) {
 		ArrayList<Token> tokens = new ArrayList<Token>();	// create empty list to add completed tokens to
 		// to add tokens to list, call
