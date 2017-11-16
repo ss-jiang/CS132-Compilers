@@ -140,7 +140,7 @@ function copy {
 export -f copy
 
 function vapor_eval {
-    $JAVA -jar $MISC_FOLDER/vapor.jar run -no-stack-trace-on-explicit-error $1 &>$2
+    $JAVA -jar "$MISC_FOLDER/vapor.jar" run -no-stack-trace-on-explicit-error $1 &>$2
 }
 export -f vapor_eval
 
