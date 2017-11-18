@@ -420,8 +420,35 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String f2Output = n.f2.accept(this, argu);
       n.f3.accept(this, argu);
 
-      // System.out.println("F2: " + f2Output);
 
+      Boolean need2PrintNullCheck = false;
+
+      // System.out.println(f0Output + " - " + f2Output);
+      if (f2Output.contains("call :AllocArray")) {
+            String allocSize = f2Output.substring(f2Output.indexOf("(") + 1, f2Output.indexOf(")"));
+            // System.out.println("===> array size: " + f0Output + " -> " + allocSize);
+            argu.arraySize.put(f0Output, allocSize);
+
+            String ret =  f2Output.substring(0, f2Output.indexOf(" "));
+            // System.out.println("===> TV2A: " + ret + " -> " + f0Output);
+            argu.tempVar2Array.put(ret, f0Output);
+
+            argu.print(f2Output);
+
+            // if (f2Output.startsWith("[this")) {
+            //       String t = "t." + argu.T;
+            //       argu.addT();
+            //       argu.print("%s = %s", t, f0Output);
+            //       f0Output = t;
+
+            //       argu.assigningLookUpRes = false;
+            // }
+            need2PrintNullCheck = true;
+
+            f2Output = ret;
+      }
+
+      // System.out.println("here10");
       if (!argu.tempVar2String.isEmpty()) {
             int size = argu.tempVar2String.size();
             for (int i = 0; i < size; i++) {
@@ -462,17 +489,16 @@ public class J2VVisitor implements GJVisitor<String, Context> {
                                     argu.print("%s = %s", key, argu.tempVar2String.get(i).get(key).trim());                                                                  
                               }
                         }
+                        
                   }    
             }
       } 
       else {
             argu.print("%s = %s", f0Output, f2Output.trim());
-      }
-
-      if (f2Output.startsWith("call :AllocArray")) {
-            String allocSize = f2Output.substring(f2Output.indexOf("(") + 1, f2Output.indexOf(")"));
-            argu.arraySize.put(f0Output, allocSize);
-            // System.out.println("Array " + f0Output + " is of size " + allocSize);
+            if (need2PrintNullCheck) {
+                  argu.printNullCheck(f2Output.trim());
+                  need2PrintNullCheck = false;                  
+            }
       }
 
       argu.calledFromAS = false;
@@ -866,6 +892,13 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String f2Output = n.f2.accept(this, argu);
       n.f3.accept(this, argu);
 
+      // System.out.println("Lookup: " + f0Output + " - "+ f2Output);
+
+      String initF0 = f0Output;
+      if (argu.tempVar2Array.containsKey(f0Output)) {
+            f0Output = argu.tempVar2Array.get(f0Output);
+      }
+
       if (argu.calledFromAS) {
             HashMap<String, String> holder = new HashMap<String, String>();
             holder.put("ifcheck", String.format("if %s goto :null%d", f0Output, argu.N).toString());
@@ -887,8 +920,12 @@ public class J2VVisitor implements GJVisitor<String, Context> {
 
       String t = "t." + argu.T;
 
-      if (argu.arraySize.containsKey(f0Output)) {
+
+      // System.out.println("here0");
+      // if (argu.tempVar2Array.containsKey(f0Output)) {
+      //       System.out.println("here1");
             if (argu.calledFromAS) {
+                  // System.out.println("here2");
                   HashMap<String, String> holder = new HashMap<String, String>();
                   holder.put(t, String.format("[%s]", f0Output));
                   argu.tempVar2String.add(holder);
@@ -928,6 +965,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
             }
             else 
             {
+                  // System.out.println("here3");
                   argu.print("%s = [%s]", t, f0Output);
                   argu.print("%s = LtS(%s %s)", t, f2Output, t);
       
@@ -947,7 +985,10 @@ public class J2VVisitor implements GJVisitor<String, Context> {
                   argu.addB();
                   argu.addT();
             }
-      }
+      // }
+      // else {
+            
+      // }
 
       return t;
    }
@@ -960,10 +1001,19 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(ArrayLength n, Context argu) {
       String _ret=null;
-      n.f0.accept(this, argu);
+
+      argu.lengthLookUp = true;
+
+      String f0Output = n.f0.accept(this, argu);
+
+      String s = argu.tempVar2Array.get(f0Output);
+      argu.assigningLookUpRes = true;
+      argu.lengthLookUp = false;
+ 
+
       n.f1.accept(this, argu);
       n.f2.accept(this, argu);
-      return _ret;
+      return s;
    }
 
    /**
@@ -1150,10 +1200,10 @@ public class J2VVisitor implements GJVisitor<String, Context> {
 
       if (f0Output.startsWith("[this")) {
             String t = "t." + argu.T;
-
-            if (argu.arraySize.containsKey(f0Output)) {
-                  argu.arraySize.put(t, argu.arraySize.get(f0Output));
-                  argu.arraySize.remove(f0Output);
+            if (argu.tempVar2Array.containsKey(f0Output)) {
+                  System.out.println("PE reentering TV2A: " + t + " -> " + argu.tempVar2Array.get(f0Output));
+                  argu.tempVar2Array.put(t, argu.tempVar2Array.get(f0Output));
+                  argu.tempVar2Array.remove(f0Output);
             }
             if (argu.tempVar2Fields.containsKey(f0Output)) {
                   argu.tempVar2Fields.put(t, argu.tempVar2Fields.get(f0Output));
@@ -1174,9 +1224,6 @@ public class J2VVisitor implements GJVisitor<String, Context> {
             f0Output = t;
             argu.addT();
       }
-
-      // System.out.println("          returning primary expression:" + f0Output);
-
       return f0Output;
    }
 
@@ -1215,10 +1262,12 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       n.f0.accept(this, argu);
 
       String ret = n.f0.toString();
+
+
       if (argu.classFields.containsKey(argu.currentClass)) {
             int index = 0;
             for (String key : argu.classFields.get(argu.currentClass).keySet()) {
-                  if (key.equals(ret)) {
+                  if (key.equals(ret)) {                        
                         String s = String.format("[this+%d]", index*4);
                         String type = argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, ret);
                         if (type == null) {
@@ -1230,17 +1279,21 @@ public class J2VVisitor implements GJVisitor<String, Context> {
                         else {
                               argu.tempVar2Fields.put(s, type);
                         }
-                        // if (argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, ret) != null || argu.getFieldType(argu.currentClass, ret) != null) {
-                        //       argu.tempVar2Fields.put(s, ret);
-                        // }
-
-                        // System.out.println(s);
-                        if (argu.arraySize.containsKey(ret)) {
-                              argu.arraySize.put(s, argu.arraySize.get(ret));
+                        if (argu.tempVar2Array.containsKey(ret)) {
+                              // System.out.println("IDENTITY reentering TV2A: " + s + " -> " + argu.tempVar2Array.get(ret));                              
+                              argu.tempVar2Array.put(s, argu.tempVar2Array.get(ret));
                         }
                         ret = s;
                   }
                   index++;
+            }
+      }
+
+      if (argu.lengthLookUp) {
+            for (String k : argu.tempVar2Array.keySet()) {
+                  if (argu.tempVar2Array.get(k).equals(ret)) {
+                        return k;
+                  }
             }
       }
 
@@ -1278,11 +1331,11 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String t = "t." + argu.T;
       argu.addT();
 
-      String ret = "call :AllocArray(" + f3Output +")";
+      String ret = t + " = call :AllocArray(" + f3Output +")";
       
-      argu.print("%s = %s", t, ret);
+      // argu.print("%s = %s", t, ret);
 
-      return t;
+      return ret;
    }
 
    /**

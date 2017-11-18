@@ -72,6 +72,8 @@ public class Context {
       // Holds the array -> size mapping
       public HashMap<String, String> arraySize = new HashMap<String, String>();
 
+      public HashMap<String, String> tempVar2Array = new HashMap<String, String>();
+
       public HashMap<String, String> msType = new HashMap<String, String>();
 
 /* End container variables */
@@ -180,6 +182,9 @@ public class Context {
 
 /* Miscellaneous variables */
       public Boolean arrayAlloc = false;
+
+      public Boolean lengthLookUp = false;
+      public Boolean assigningLookUpRes = false;
 
       public String currentClass = null;
       
