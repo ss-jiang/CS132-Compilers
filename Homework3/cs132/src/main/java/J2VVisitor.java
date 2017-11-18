@@ -197,7 +197,11 @@ public class J2VVisitor implements GJVisitor<String, Context> {
    public String visit(ClassExtendsDeclaration n, Context argu) {
       String _ret=null;
       n.f0.accept(this, argu);
-      n.f1.accept(this, argu);
+
+      String f1Output = n.f1.accept(this, argu);
+
+      argu.currentClass = f1Output;
+
       n.f2.accept(this, argu);
       n.f3.accept(this, argu);
       n.f4.accept(this, argu);
@@ -261,6 +265,13 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       n.f8.accept(this, argu);
       n.f9.accept(this, argu);
       String f10Output = n.f10.accept(this, argu);
+
+      if (f10Output.startsWith("[this")) {
+            argu.print("%s = %s", "t." + argu.T, f10Output);
+            f10Output = "t." + argu.T;
+            argu.addT();
+      }
+
       n.f11.accept(this, argu);
       n.f12.accept(this, argu);
 
@@ -399,36 +410,57 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(AssignmentStatement n, Context argu) {
       String _ret=null;
+      argu.calledFromAS = true;
+
       String f0Output = n.f0.accept(this, argu);
       n.f1.accept(this, argu);
-
-      argu.calledFromAS = true;
 
       argu.tempVar2String.clear();
 
       String f2Output = n.f2.accept(this, argu);
       n.f3.accept(this, argu);
 
+      // System.out.println("F2: " + f2Output);
+
       if (!argu.tempVar2String.isEmpty()) {
             int size = argu.tempVar2String.size();
             for (int i = 0; i < size; i++) {
                   if (i == size - 1) {
                         for (String key : argu.tempVar2String.get(i).keySet()) {
-                              if (key.equals("ifcheck")) {
+                              if (key.equals("ifcheck") || key.equals("boundcheck")) {
                                     argu.print("%s", argu.tempVar2String.get(i).get(key));                                                                                                      
                               }
                               else {
-                                    argu.print("%s = %s", f0Output, argu.tempVar2String.get(i).get(key).trim());                                                                  
+                                    if (f0Output.startsWith("[this")) {
+                                          String t = "t." + argu.T;
+                                          argu.addT();
+
+                                          argu.print("%s = %s", t, argu.tempVar2String.get(i).get(key).trim());
+                                          argu.print("%s = %s", f0Output, t);
+                                    }
+                                    else {
+                                          argu.print("%s = %s", f0Output, argu.tempVar2String.get(i).get(key).trim());                                                                                                            
+                                    }
                               }
                         }
                         break;
                   }
                   for (String key : argu.tempVar2String.get(i).keySet()) {
-                        if (key.equals("ifcheck")) {
+                        if (key.equals("ifcheck") || key.equals("boundcheck")) {
                               argu.print("%s", argu.tempVar2String.get(i).get(key));                                                                                                                                    
                         }
                         else {
-                              argu.print("%s = %s", key, argu.tempVar2String.get(i).get(key).trim());                              
+                              if (key.startsWith("[this")) {
+                                    String t = "t." + argu.T;
+                                    argu.addT();
+                                    System.out.println("here");
+                                    argu.print("%s = %s", t, argu.tempVar2String.get(i).get(key).trim());
+                                    argu.print("%s = %s", key, t);
+                                    System.out.println("here2");
+                              }
+                              else {
+                                    argu.print("%s = %s", key, argu.tempVar2String.get(i).get(key).trim());                                                                  
+                              }
                         }
                   }    
             }
@@ -438,7 +470,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       }
 
       if (f2Output.startsWith("call :AllocArray")) {
-            int allocSize = Integer.parseInt(f2Output.substring(f2Output.indexOf("(") + 1, f2Output.indexOf(")")));
+            String allocSize = f2Output.substring(f2Output.indexOf("(") + 1, f2Output.indexOf(")"));
             argu.arraySize.put(f0Output, allocSize);
             // System.out.println("Array " + f0Output + " is of size " + allocSize);
       }
@@ -459,15 +491,93 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     */
     // TODO
    public String visit(ArrayAssignmentStatement n, Context argu) {
-      String _ret=null;
-      n.f0.accept(this, argu);
+      String ret = null;
+      String f0Output = n.f0.accept(this, argu);
+
+      String t = "t." + argu.T;
+      if (f0Output.startsWith("[this")) {
+            argu.print("%s = %s", t, f0Output);
+            argu.printNullCheck(t);
+            // argu.addT();
+            // argu.addN();
+      }
+
+
       n.f1.accept(this, argu);
-      n.f2.accept(this, argu);
+      String f2Output = n.f2.accept(this, argu);
+
+      // System.out.println("FOUND: " + f2Output);
+
+      // System.out.println("Current class: " + argu.currentClass);
+      // System.out.println("Current method: " + argu.currentMethod);
+      // System.out.println("Fields: " + argu.getFromMethodFields(argu.currentClass, argu.currentMethod, f2Output));
+      // System.out.println("Formals: " + argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, f2Output));
+      // System.out.println("Class: " + argu.getFieldType(argu.currentClass, f2Output));
+
+      // check method fields, then method formals, then class fields
+      // if (argu.getFromMethodFields(argu.currentClass, argu.currentMethod, f2Output) != null || argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, f2Output) != null || argu.getFieldType(argu.currentClass, f2Output) != null) {
+            argu.addT();
+
+            String t2 = "t." + argu.T;
+            argu.print("%s = [%s]", t2, t);
+            argu.print("%s = LtS(%s %s)", t2, f2Output, t2);
+      
+            argu.print("if %s goto :bounds%d", t2, argu.B);
+            argu.print("  Error(\"array index out of bounds\")");
+            argu.print("bounds%d:", argu.B);
+      
+            argu.print("%s = MulS(%s 4)", t2, f2Output);
+            argu.print("%s = Add(%s %s)", t2, t2, t);
+      
+            // argu.addT();
+      
+            ret = "t." + argu.T;
+            // argu.print("%s = [%s+4]", "this", t);
+      
+            argu.addB();
+            argu.addT();
+      // }
+
+
       n.f3.accept(this, argu);
       n.f4.accept(this, argu);
-      n.f5.accept(this, argu);
+      String f5Output = n.f5.accept(this, argu);
+
+      argu.print("[%s+4] = %s", t2, f5Output);
+
+      // System.out.println("F0 " + t2);
+      // System.out.println("F5: " + f5Output);
+
+      // if (!argu.tempVar2String.isEmpty()) {
+      //       int size = argu.tempVar2String.size();
+      //       for (int i = 0; i < size; i++) {
+      //             if (i == size - 1) {
+      //                   for (String key : argu.tempVar2String.get(i).keySet()) {
+      //                         if (key.equals("ifcheck") || key.equals("boundcheck")) {
+      //                               argu.print("%s", argu.tempVar2String.get(i).get(key));                                                                                                      
+      //                         }
+      //                         else {
+      //                               argu.print("%s = %s", f0Output, argu.tempVar2String.get(i).get(key).trim());                                                                  
+      //                         }
+      //                   }
+      //                   break;
+      //             }
+      //             for (String key : argu.tempVar2String.get(i).keySet()) {
+      //                   if (key.equals("ifcheck") || key.equals("boundcheck")) {
+      //                         argu.print("%s", argu.tempVar2String.get(i).get(key));                                                                                                                                    
+      //                   }
+      //                   else {
+      //                         argu.print("%s = %s", key, argu.tempVar2String.get(i).get(key).trim());                              
+      //                   }
+      //             }    
+      //       }
+      // } 
+      // else {
+      //       argu.print("%s = %s", f0Output, f5Output.trim());
+      // }
+
       n.f6.accept(this, argu);
-      return _ret;
+      return ret;
    }
 
    /**
@@ -526,20 +636,22 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String _ret=null;
       n.f0.accept(this, argu);
       n.f1.accept(this, argu);
-      argu.print("while%d_top:", argu.W);
+
+      int w = argu.W;
+      argu.print("while%d_top:", w);
+      argu.addW();
 
       String f2Output = n.f2.accept(this, argu);
 
-      argu.print("if0 %s goto :while%d_end", f2Output, argu.W);
+      argu.print("if0 %s goto :while%d_end", f2Output, w);
       argu.addIndent();
 
       n.f3.accept(this, argu);
       n.f4.accept(this, argu);
 
-      argu.print("goto :while%d_top", argu.W);
+      argu.print("goto :while%d_top", w);
       argu.subIndent();
-      argu.print("while%d_end:", argu.W);
-      argu.addW();
+      argu.print("while%d_end:", w);
 
       return _ret;
    }
@@ -591,13 +703,35 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(AndExpression n, Context argu) {
       String _ret=null;
+
+      String t = "t." + argu.T;
+      argu.addT();
+
       String f0Output = n.f0.accept(this, argu);
       n.f1.accept(this, argu);
+
+      argu.print("if0 %s goto :ss%d_else", f0Output, argu.A);
+      argu.addIndent();
+
+      argu.calledFromAE = true;
       String f2Output = n.f2.accept(this, argu);
 
-      System.out.println("AND EXPRESSION!!");
-      System.out.println(f0Output + " -- " + f2Output);
-      return _ret;
+      argu.print("%s = Sub(1 %s)", t, f2Output);
+      argu.print("goto :ss%d_end", argu.A);
+
+      argu.subIndent();
+      argu.print("ss%d_else:", argu.A);
+      argu.addIndent();
+      argu.print("%s = 0", t);
+      argu.subIndent();
+      argu.print("ss%d_end:", argu.A);
+
+      argu.addA();
+
+      argu.calledFromAE = false;
+      // System.out.println("AND EXPRESSION!!");
+      // System.out.println(f0Output + " -- " + f2Output);
+      return t;
    }
 
    /**
@@ -668,6 +802,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(MinusExpression n, Context argu) {
       String f0Output = n.f0.accept(this, argu);
+
       n.f1.accept(this, argu);
       String f2Output = n.f2.accept(this, argu);
 
@@ -726,34 +861,95 @@ public class J2VVisitor implements GJVisitor<String, Context> {
    public String visit(ArrayLookup n, Context argu) {
       String ret=null;
       String f0Output = n.f0.accept(this, argu);
+
       n.f1.accept(this, argu);
       String f2Output = n.f2.accept(this, argu);
       n.f3.accept(this, argu);
 
-      argu.printNullCheck(f0Output);
+      if (argu.calledFromAS) {
+            HashMap<String, String> holder = new HashMap<String, String>();
+            holder.put("ifcheck", String.format("if %s goto :null%d", f0Output, argu.N).toString());
+            argu.tempVar2String.add(holder);
 
-      if (argu.arraySize.containsKey(f0Output)) {
-            String t = "t." + argu.T;
-            argu.print("%s = [%s]", t, f0Output);
-            argu.print("%s = LtS(%s %s)", t, f2Output, t);
+            holder = new HashMap<String, String>();
+            holder.put("ifcheck", String.format("  Error(\"null pointer\")").toString());
+            argu.tempVar2String.add(holder);
 
-            argu.print("if %s goto :bounds%d", t, argu.B);
-            argu.print("  Error(\"array index out of bounds\")");
-            argu.print("bounds%d:", argu.B);
+            holder = new HashMap<String, String>();
+            holder.put("ifcheck", String.format("null%d:", argu.N).toString());
+            argu.tempVar2String.add(holder);
 
-            argu.print("%s = MulS(%s 4)", t, f2Output);
-            argu.print("%s = Add(%s %s)", t, t, f0Output);
-
-            argu.addT();
-
-            ret = "t." + argu.T;
-            argu.print("%s = [%s+4]", ret, t);
-
-            argu.addB();
-            argu.addT();
+            argu.addN();
+      }
+      else {
+            argu.printNullCheck(f0Output);           
       }
 
-      return ret;
+      String t = "t." + argu.T;
+
+      if (argu.arraySize.containsKey(f0Output)) {
+            if (argu.calledFromAS) {
+                  HashMap<String, String> holder = new HashMap<String, String>();
+                  holder.put(t, String.format("[%s]", f0Output));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put(t, String.format("LtS(%s %s)", f2Output, t));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put("boundcheck", String.format("if %s goto :bounds%d", t, argu.B));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put("boundcheck", String.format("  Error(\"array index out of bounds\")"));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put("boundcheck", String.format("bounds%d:", argu.B));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put(t, String.format("MulS(%s 4)", f2Output));
+                  argu.tempVar2String.add(holder);
+
+                  holder = new HashMap<String, String>();
+                  holder.put(t, String.format("Add(%s %s)", t, f0Output));
+                  argu.tempVar2String.add(holder);
+
+                  argu.addT();
+
+                  holder = new HashMap<String, String>();
+                  holder.put("", String.format("[%s+4]", t));
+                  argu.tempVar2String.add(holder);
+
+                  argu.addB();
+                  // argu.addT();
+            }
+            else 
+            {
+                  argu.print("%s = [%s]", t, f0Output);
+                  argu.print("%s = LtS(%s %s)", t, f2Output, t);
+      
+                  argu.print("if %s goto :bounds%d", t, argu.B);
+                  argu.print("  Error(\"array index out of bounds\")");
+                  argu.print("bounds%d:", argu.B);
+      
+                  argu.print("%s = MulS(%s 4)", t, f2Output);
+                  argu.print("%s = Add(%s %s)", t, t, f0Output);
+      
+                  argu.addT();
+      
+                  ret = "t." + argu.T;
+                  argu.print("%s = [%s+4]", ret, t);
+                  t = ret;
+
+                  argu.addB();
+                  argu.addT();
+            }
+      }
+
+      return t;
    }
 
    /**
@@ -783,7 +979,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String _ret=null;
       String f0Output = n.f0.accept(this, argu);
 
-      if (argu.classObject.containsKey(f0Output) || argu.currentClass.equals("Main") || argu.tempVar2Class.containsKey(f0Output) || argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, f0Output) != null) {
+      if (argu.classObject.containsKey(f0Output) || argu.currentClass.equals("Main") || argu.tempVar2Fields.containsKey(f0Output) || argu.tempVar2Class.containsKey(f0Output) || argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, f0Output) != null) {
             if (argu.calledFromAS) {
                   HashMap<String, String> holder = new HashMap<String, String>();
                   holder.put("ifcheck", String.format("if %s goto :null%d", f0Output, argu.N).toString());
@@ -809,6 +1005,9 @@ public class J2VVisitor implements GJVisitor<String, Context> {
 
       String className = argu.tempVar2Class.get(f0Output);
       if (className == null) {
+            if (argu.tempVar2Fields.get(f0Output) != null) {
+                  className = argu.tempVar2Fields.get(f0Output);
+            }
             if (argu.classObject.containsKey(f0Output)) {
                   className = argu.classObject.get(f0Output);
             }
@@ -818,7 +1017,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       }
       else {
             argu.tempVar2Class.remove(f0Output);
-            // argu.addT();
+            argu.addT();
       }
 
       String type = "";
@@ -834,7 +1033,6 @@ public class J2VVisitor implements GJVisitor<String, Context> {
 
 
       if (f0Output.equals("this")) {
-            // System.out.println("Current class: " + argu.currentClass);
             className = argu.currentClass;
       }
 
@@ -863,6 +1061,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
             else {
                   argu.print("%s = [%s]", t, f0Output);
                   argu.print("%s = [%s+%d]", t, t, index*4);
+                  // System.out.println("Hi1");
             }
             argu.addT();
             callFunc = t;
@@ -878,6 +1077,7 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       }
       
       if (argu.calledFromAS) {
+            // System.out.println("Hi2");
             String out = argu.formString("call %s(%s%s)", callFunc, f0Output, argu.currentExpList);
 
             HashMap<String, String> holder = new HashMap<String, String>();
@@ -948,6 +1148,33 @@ public class J2VVisitor implements GJVisitor<String, Context> {
    public String visit(PrimaryExpression n, Context argu) {
       String f0Output = n.f0.accept(this, argu);
 
+      if (f0Output.startsWith("[this")) {
+            String t = "t." + argu.T;
+
+            if (argu.arraySize.containsKey(f0Output)) {
+                  argu.arraySize.put(t, argu.arraySize.get(f0Output));
+                  argu.arraySize.remove(f0Output);
+            }
+            if (argu.tempVar2Fields.containsKey(f0Output)) {
+                  argu.tempVar2Fields.put(t, argu.tempVar2Fields.get(f0Output));
+                  argu.tempVar2Fields.remove(f0Output);
+            }
+
+            if (argu.calledFromAS) {
+                  String s = argu.formString("%s", f0Output);
+                  
+                  HashMap<String, String> holder = new HashMap<String, String>();
+                  holder.put(t, s);
+      
+                  argu.tempVar2String.add(holder);
+            }
+            else {
+                  argu.print("%s = %s", "t." + argu.T, f0Output);
+            }
+            f0Output = t;
+            argu.addT();
+      }
+
       // System.out.println("          returning primary expression:" + f0Output);
 
       return f0Output;
@@ -986,7 +1213,38 @@ public class J2VVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(Identifier n, Context argu) {
       n.f0.accept(this, argu);
-      return n.f0.toString();
+
+      String ret = n.f0.toString();
+      if (argu.classFields.containsKey(argu.currentClass)) {
+            int index = 0;
+            for (String key : argu.classFields.get(argu.currentClass).keySet()) {
+                  if (key.equals(ret)) {
+                        String s = String.format("[this+%d]", index*4);
+                        String type = argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, ret);
+                        if (type == null) {
+                              type = argu.getFieldType(argu.currentClass, ret);
+                              if (type != null) {
+                                    argu.tempVar2Fields.put(s, type);
+                              }
+                        }
+                        else {
+                              argu.tempVar2Fields.put(s, type);
+                        }
+                        // if (argu.getFromMethodFormals(argu.currentClass, argu.currentMethod, ret) != null || argu.getFieldType(argu.currentClass, ret) != null) {
+                        //       argu.tempVar2Fields.put(s, ret);
+                        // }
+
+                        // System.out.println(s);
+                        if (argu.arraySize.containsKey(ret)) {
+                              argu.arraySize.put(s, argu.arraySize.get(ret));
+                        }
+                        ret = s;
+                  }
+                  index++;
+            }
+      }
+
+      return ret;
    }
 
    /**
@@ -1017,9 +1275,14 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String f3Output = n.f3.accept(this, argu);
       n.f4.accept(this, argu);
 
-      String ret = "call :AllocArray(" + f3Output +")";
+      String t = "t." + argu.T;
+      argu.addT();
 
-      return ret;
+      String ret = "call :AllocArray(" + f3Output +")";
+      
+      argu.print("%s = %s", t, ret);
+
+      return t;
    }
 
    /**
@@ -1058,8 +1321,13 @@ public class J2VVisitor implements GJVisitor<String, Context> {
       String f1Output = n.f1.accept(this, argu);
 
       String ret = "t." + argu.T;
-      argu.print("%s = Sub(1 %s)", ret, f1Output);
-      argu.addT();
+      if (argu.calledFromAE) {
+            ret = f1Output;
+      }
+      else {
+            argu.print("%s = Sub(1 %s)", ret, f1Output);      
+            argu.addT();      
+      }
 
       return ret;
    }

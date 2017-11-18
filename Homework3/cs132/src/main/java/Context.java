@@ -11,10 +11,10 @@ public class Context {
 
       // Holds the class -> (field name, type) mapping
       public HashMap<String, LinkedHashMap<String, String>> classFields = new HashMap<String, LinkedHashMap<String, String>>();
-      public String getFieldType(String c, String m) {
+      public String getFieldType(String c, String f) {
             if (classFields.containsKey(c)) {
-                  if (classFields.get(c).containsKey(m)) {
-                        return classFields.get(c).get(m);
+                  if (classFields.get(c).containsKey(f)) {
+                        return classFields.get(c).get(f);
                   }
             }
             return null;
@@ -44,6 +44,21 @@ public class Context {
             return null;
       }
 
+      // Holds the class -> method -> (fields, type) mapping
+      public HashMap<String, HashMap<String, LinkedHashMap<String, String>>> methodFields = new HashMap<String, HashMap<String, LinkedHashMap<String, String>>>();
+      public String getFromMethodFields(String c, String m, String k) {
+            if (methodFields.containsKey(c)) {
+                  if (methodFields.get(c).containsKey(m)) {
+                        if (methodFields.get(c).get(m).containsKey(k)) {
+                              return methodFields.get(c).get(m).get(k);     
+                        }
+                  }
+            }
+            return null;
+      }
+
+      
+      public HashMap<String, String> tempVar2Fields = new HashMap<String, String>();
 
       // Holds the current declared class objects
       public HashMap<String, String> classObject = new HashMap<String, String>();
@@ -55,7 +70,7 @@ public class Context {
       public LinkedList<HashMap<String, String>> tempVar2String = new LinkedList<HashMap<String, String>>();
 
       // Holds the array -> size mapping
-      public HashMap<String, Integer> arraySize = new HashMap<String, Integer>();
+      public HashMap<String, String> arraySize = new HashMap<String, String>();
 
       public HashMap<String, String> msType = new HashMap<String, String>();
 
@@ -86,6 +101,11 @@ public class Context {
       public int W = 1;       // while starts at 1
       public void addW() {
             W++;
+      }
+
+      public int A = 1;       // && start at 1
+      public void addA() {
+            A++;
       }
 
       // keep track of indentations
@@ -166,7 +186,9 @@ public class Context {
       public Boolean inMethod = false;
       public String currentMethod = null;
 
-      public Boolean calledFromAS = false;
+      public Boolean calledFromAS = false;      // From assignment statement
+
+      public Boolean calledFromAE = false;      // From and expression
 
       public String currentExpList = "";
       public String getCurrentExpList() {

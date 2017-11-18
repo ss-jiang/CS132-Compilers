@@ -150,7 +150,8 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
             argu.classList.add(f1Output);
             argu.classFields.put(f1Output, new LinkedHashMap<String, String>());
             argu.VMT.put(f1Output, new LinkedHashMap<String, String>());     
-            argu.classMethods.put(argu.currentClass, new LinkedHashMap<String, String>());       
+            argu.classMethods.put(argu.currentClass, new LinkedHashMap<String, String>());   
+            argu.methodFields.put(argu.currentClass, new HashMap<String, LinkedHashMap<String, String>>());            
       }
       else {
             return "error";
@@ -207,10 +208,10 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       }
       else {
             argu.classList.add(f1Output);
-            argu.classFields.put(f1Output, new LinkedHashMap<String, String>());
+            argu.classFields.put(f1Output, new LinkedHashMap<String, String>(argu.classFields.get(f3Output)));
             argu.VMT.put(f1Output, new LinkedHashMap<String,String>(argu.VMT.get(f3Output)));
-            argu.classMethods.put(argu.currentClass, new LinkedHashMap<String, String>());
-            
+            argu.classMethods.put(argu.currentClass, new LinkedHashMap<String, String>(argu.classMethods.get(f3Output)));
+            argu.methodFields.put(argu.currentClass, new HashMap<String, LinkedHashMap<String, String>>());            
       }
 
       n.f4.accept(this, argu);
@@ -249,8 +250,16 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
             // argu.classSpace.put(argu.currentClass, argu.classSpace.get(argu.currentClass) + 1);
             argu.classFields.get(argu.currentClass).put(f1Output, f0Output);
       }
-      if (!f0Output.equals("int") && !f0Output.equals("boolean")) {
-            argu.classObject.put(f1Output, f0Output);
+      if (f0Output.equals("array")) {
+            argu.arraySize.put(f1Output, null);
+      }
+      if (!f0Output.equals("int") && !f0Output.equals("boolean") && !f0Output.equals("array")) {
+            argu.classObject.put(f1Output, f0Output);                  
+      }
+      else {
+            if (argu.inMethod && argu.currentMethod != null)  {
+                  argu.methodFields.get(argu.currentClass).get(argu.currentMethod).put(f1Output, f0Output);
+            }
       }
       return _ret;
    }
@@ -284,11 +293,13 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
             if (argu.VMT.containsKey(argu.currentClass)) {
                   // System.out.println("Adding method: " + argu.currentClass + "." + f2Output + " to class " + argu.currentClass);
                   argu.VMT.get(argu.currentClass).put(f2Output, argu.currentClass);   
-                  argu.classMethods.get(argu.currentClass).put(f2Output, f1Output);        
+                  argu.classMethods.get(argu.currentClass).put(f2Output, f1Output);
+                  argu.methodFields.get(argu.currentClass).put(f2Output,  new LinkedHashMap<String, String>());    
             }
       }
 
       argu.currentMethod = f2Output;
+      // System.out.println("  Encountered method: " + f2Output);
 
       n.f3.accept(this, argu);
       n.f4.accept(this, argu);
