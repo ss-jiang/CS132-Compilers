@@ -74,6 +74,8 @@ public class Context {
 
       public HashMap<String, String> tempVar2Array = new HashMap<String, String>();
 
+      public HashMap<String, String> tempVarInMsgSnd = new HashMap<String, String>();
+
       public HashMap<String, String> msType = new HashMap<String, String>();
 
 /* End container variables */
@@ -195,6 +197,10 @@ public class Context {
 
       public Boolean calledFromAE = false;      // From and expression
 
+      public Boolean calledFromMS = false;
+
+      public Boolean newIdent = false;
+
       public String currentExpList = "";
       public String getCurrentExpList() {
             return currentExpList.trim();
@@ -212,25 +218,5 @@ public class Context {
       }
 
 /* End Miscellaneous variables */
-
-
-/* Typing */
-      public class Pair<L,R> {
-            private L l;
-            private R r;
-
-            public Pair() {}
-
-            public Pair(L l, R r) {
-                  this.l = l;
-                  this.r = r;
-            }
-            
-            public L getL() { return l; }
-            public R getR() { return r; }
-            public void setL(L l) { this.l = l; }
-            public void setR(R r) { this.r = r; }
-      }
-/* End Typing */
 
 }

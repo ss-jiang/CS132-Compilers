@@ -98,6 +98,10 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
     // TODO
    public String visit(MainClass n, Context argu) {
       String _ret=null;
+
+      argu.currentClass = "Main";
+      argu.classFields.put(argu.currentClass, new LinkedHashMap<String, String>());
+
       n.f0.accept(this, argu);
       n.f1.accept(this, argu);
       n.f2.accept(this, argu);
@@ -144,7 +148,6 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       n.f0.accept(this, argu);
       String f1Output = n.f1.accept(this, argu);
 
-      // System.out.println("Encountered class: " + f1Output);
       argu.currentClass = f1Output;
       if (!argu.classList.contains(f1Output)) {
             argu.classList.add(f1Output);
@@ -197,7 +200,6 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       n.f0.accept(this, argu);
       String f1Output = n.f1.accept(this, argu);
 
-      // System.out.println("Encountered class: " + f1Output);
       argu.currentClass = f1Output;
 
       n.f2.accept(this, argu);
@@ -288,10 +290,8 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       String f1Output = n.f1.accept(this, argu);
       String f2Output = n.f2.accept(this, argu);
 
-      // System.out.println("Found method: " + f2Output);
       if (argu.currentClass != null) {
             if (argu.VMT.containsKey(argu.currentClass)) {
-                  // System.out.println("Adding method: " + argu.currentClass + "." + f2Output + " to class " + argu.currentClass);
                   argu.VMT.get(argu.currentClass).put(f2Output, argu.currentClass);   
                   argu.classMethods.get(argu.currentClass).put(f2Output, f1Output);
                   argu.methodFields.get(argu.currentClass).put(f2Output,  new LinkedHashMap<String, String>());    
@@ -299,21 +299,9 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       }
 
       argu.currentMethod = f2Output;
-      // System.out.println("  Encountered method: " + f2Output);
 
       n.f3.accept(this, argu);
       n.f4.accept(this, argu);
-
-      // System.out.println(argu.currentClass + " - " + argu.currentMethod);
-      // // System.out.println("Method formals: " + argu.methodFormals.get(argu.currentClass).get(argu.currentMethod).toString());
-
-      // System.out.println("Method formals:");
-      // if (argu.currentClass.equals("Tree")) {
-      //       for (String key : argu.methodFormals.get(argu.currentClass).get(argu.currentMethod).keySet()) {
-      //             System.out.println("    " + key + " - " + argu.methodFormals.get(argu.currentClass).get(argu.currentMethod).get(key));
-      //       }
-      // }
-
       n.f5.accept(this, argu);
       n.f6.accept(this, argu);
       n.f7.accept(this, argu);
