@@ -100,6 +100,7 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       String _ret=null;
 
       argu.currentClass = "Main";
+      argu.inMethod = true;
       argu.classFields.put(argu.currentClass, new LinkedHashMap<String, String>());
 
       n.f0.accept(this, argu);
@@ -120,6 +121,8 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
       n.f15.accept(this, argu);
       n.f16.accept(this, argu);
       n.f17.accept(this, argu);
+
+      argu.inMethod = false;
       return _ret;
    }
 
@@ -250,6 +253,7 @@ public class FirstPassVisitor implements GJVisitor<String, Context> {
 
       if (!argu.inMethod) {
             // argu.classSpace.put(argu.currentClass, argu.classSpace.get(argu.currentClass) + 1);
+            // System.out.println("added " + f1Output + " to classFields" );
             argu.classFields.get(argu.currentClass).put(f1Output, f0Output);
       }
       if (f0Output.equals("array")) {

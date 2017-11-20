@@ -201,6 +201,10 @@ public class Context {
 
       public Boolean newIdent = false;
 
+      public Boolean returnFromMS = false;
+
+      public ArrayList<String> ExpList = new ArrayList<String>();
+
       public String currentExpList = "";
       public String getCurrentExpList() {
             return currentExpList.trim();
