@@ -7,13 +7,31 @@ import javax.net.ssl.ExtendedSSLSession;
 public class LA extends VInstr.Visitor<Throwable> { 
     
   public String functionName;
+  public String currentLabel;
+  public int labelLine;
+
   public LinkedList<String> calleeRegisters = new LinkedList<String>();
   public LinkedList<String> callerRegisters = new LinkedList<String>();
 
-  // Holds (function name, variable) -> (line start, line end)
-  public HashMap<String, LinkedHashMap<String, Lines>> liveList = new HashMap<String, LinkedHashMap<String, Lines>>();
+  // Holds function -> label -> (var, line start, line end)
+  public HashMap<String, LinkedList<Lines>> liveList = new HashMap<String, LinkedList<Lines>>();
+
+  // Holds register -> (var, line start, line end)
+  public LinkedHashMap<String, Lines> usedRegisters = new LinkedHashMap<String, Lines>();
+
+  public TreeSet<String> freeRegisters = new TreeSet<String>();
+
+  public LinkedList<String> waitingVars = new LinkedList<String>();
+
+  // Holds label -> list of variables
+  public HashMap<String, LinkedList<String>> liveAtIf = new HashMap<String, LinkedList<String>>(); 
+
+  /*
+      Functions
+  */
 
   public LA() {
+    currentLabel = null;
     calleeRegisters.addAll(Arrays.asList("s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"));
     callerRegisters.addAll(Arrays.asList("t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"));
   } 
@@ -24,16 +42,29 @@ public class LA extends VInstr.Visitor<Throwable> {
       System.out.println("Liveness Analysis of function: " + function.ident);
       
       if (!this.liveList.containsKey(function.ident)) {
-        this.liveList.put(function.ident, new LinkedHashMap<String, Lines>());
+        this.liveList.put(function.ident, new LinkedList<Lines>());
       }
       this.functionName = function.ident;
+      this.currentLabel = function.ident;
+      this.labelLine = function.sourcePos.line;
+
+      // this.liveAtIf.put(this.currentLabel, new LinkedList<String>());
 
       for (VVarRef ident : function.params) {
-        updateLines(function.sourcePos.line, ident.toString());
+        queueLines(ident.toString());
+
+        // this.liveAtIf.get(this.currentLabel).add(ident.toString());
       }
 
+
+      LinkedList<VCodeLabel> l = new LinkedList<VCodeLabel>(Arrays.asList(function.labels));
       for (VInstr instr : function.body) {
         try {
+          while (!l.isEmpty() && l.peek().sourcePos.line < instr.sourcePos.line) {
+            labelLine = l.peek().sourcePos.line;
+            currentLabel = l.pop().ident;
+          }
+
           instr.accept(this);
         }
         catch (Throwable t) {
@@ -42,49 +73,94 @@ public class LA extends VInstr.Visitor<Throwable> {
       }
       System.out.println("\n");
 
+      CrossCallChecker ccc = new CrossCallChecker();
+      this.liveList = ccc.analyze(v, this.liveList);
+
       this.PrintLiveIntervals();
       System.out.println("\n");
     }
   }
 
-  public void updateLines(int lineNum, String... idents) {
-    for (String i : idents) {
-      if (i.contains("null pointer") || i.contains(":vmt_") || i.matches("[0-9]+")) {
-        continue;
-      }
-      else {
-        if (liveList.get(functionName).containsKey(i)) {
-          liveList.get(functionName).get(i).setEnd(lineNum);
-        }
-        else {
-          System.out.println(String.format("Adding %s with starting line %d", i, lineNum));
-          Lines temp = new Lines(lineNum, lineNum);
-          liveList.get(functionName).put(i, temp);
+  public void extendLines(String fName, String lName, int lNum) {
+    if (liveList.containsKey(fName)) {
+      for (Lines l : liveList.get(fName)) {
+        if (l.labels.contains(lName)) {
+          l.setEnd(lNum);
         }
       }
     }
   }
 
-  public void updateLinesOfArgs(int lineNum, String argString) {
-    for (String i : argString.split(" ")) {
-      if (i.contains("null") ||  i.contains("pointer") || i.contains(":vmt_") || i.matches("[0-9]+")) {
+  public void queueLines(String... idents) {
+    for (String i : idents) {
+      waitingVars.add(i);
+    }
+  }
+
+  public void updateLines(int lineNum, String... idents) {
+    for (String i : idents) {
+      waitingVars.add(i);
+    }
+
+    for (String i : waitingVars) {
+      Boolean added = false;      
+      if (i.contains("null") || i.contains("pointer") || i.contains(":vmt_") || i.matches("[0-9]+")) {
         continue;
       }
       else {
-        if (liveList.get(functionName).containsKey(i)) {
-          liveList.get(functionName).get(i).setEnd(lineNum);
-        }
-        else {
-          Lines temp = new Lines(lineNum, lineNum);
-          liveList.get(functionName).put(i, temp);
+        if (liveList.containsKey(functionName)) {
+          for (Lines l : liveList.get(functionName)) {
+            if (l.getVar().equals(i)) {
+              if (!l.labels.contains(currentLabel)) {
+                l.addRange(lineNum);
+                l.labels.add(currentLabel);
+
+                if (liveAtIf.containsKey(currentLabel)) {
+                  for (String s : liveAtIf.get(currentLabel)) {
+                    if (l.getVar().equals(s)) {
+                      l.setStart(labelLine + 1);
+                      liveAtIf.get(currentLabel).remove(s);
+                    }
+                  }
+                }
+                
+              }
+              else {
+                l.setEnd(lineNum);                
+              }
+              added = true;
+
+              // if (l.getCall()) {
+              //   l.setCrossCall(true);
+              // }
+            }
+          }
+          if (!added) {
+            System.out.println(String.format("Adding %s with starting line %d", i, lineNum)); 
+            Lines temp = new Lines(i, lineNum);
+            
+            if (liveAtIf.containsKey(currentLabel)) {
+              for (String s : liveAtIf.get(currentLabel)) {
+                if (i.equals(s)) {
+                  temp.setStart(labelLine + 1);
+                  liveAtIf.get(currentLabel).remove(s);                  
+                }
+              }
+            }
+
+            temp.labels.add(currentLabel);
+            liveList.get(functionName).add(temp);
+          }
         }
       }
     }
+
+    waitingVars.clear();
   }
 
   public void PrintLiveIntervals() {
-    for (String key : liveList.get(functionName).keySet()) {
-      System.out.println(String.format("'%s' is live from lines %d - %d", key, liveList.get(functionName).get(key).getStart(), liveList.get(functionName).get(key).getEnd()));
+    for (Lines l : liveList.get(functionName)) {
+      System.out.println(String.format("'%s' is live from lines %s, Labels: %s, Cross call = %s", l.getVar(), l.printRanges(), l.labels.toString(), l.getCrossCall().toString()));        
     }
   }
 
@@ -120,8 +196,23 @@ public class LA extends VInstr.Visitor<Throwable> {
       Register managers
   */
 
+  public void allocateRegisters() {
+    
+  }
+
+  public void deallocateRegisters(Lines l) {
+    for (String r : usedRegisters.keySet()) {
+      if (usedRegisters.get(r).getEnd() < l.getStart()) {
+        usedRegisters.remove(r);
+        freeRegisters.add(r);
+      }
+    }
+  }
 
 
+  private class Var {
+
+  }
 
 
 
@@ -141,7 +232,7 @@ public class LA extends VInstr.Visitor<Throwable> {
     System.out.print("VAssign   - ");
     System.out.println(String.format("Line %d: %s %s", a.dest.sourcePos.line, a.dest.toString(), a.source.toString()));
 
-    updateLines(a.sourcePos.line, a.dest.toString());
+    queueLines(a.dest.toString());
   }
 
   //
@@ -158,8 +249,18 @@ public class LA extends VInstr.Visitor<Throwable> {
 
     System.out.println(String.format("Line %d: %s %s %s", c.sourcePos.line, c.dest.toString(), c.addr.toString(), args.trim()));
     
-    updateLines(c.sourcePos.line, c.dest.toString(), c.addr.toString());
-    updateLinesOfArgs(c.sourcePos.line, args.trim());
+    updateLines(c.sourcePos.line, c.addr.toString());
+    for (String i : args.trim().split(" ")) {
+      updateLines(c.sourcePos.line, i);
+    }
+
+    queueLines(c.dest.toString());
+
+    // for (Lines l : liveList.get(functionName)) {
+    //   if (l.labels.contains(currentLabel) && l.getStart() < c.sourcePos.line) {
+    //     l.setCall(true);        
+    //   }
+    // }
   }
 
   //
@@ -177,13 +278,17 @@ public class LA extends VInstr.Visitor<Throwable> {
     if (c.dest != null) {
       System.out.println(String.format("Line %d: %s %s", c.sourcePos.line, c.dest.toString(), args.trim()));
 
-      updateLines(c.sourcePos.line, c.dest.toString());
-      updateLinesOfArgs(c.sourcePos.line, args.trim());
+      for (String i : args.trim().split(" ")) {
+        updateLines(c.sourcePos.line, i);
+      }
+      queueLines(c.dest.toString());
     }
     else {
       System.out.println(String.format("Line %d: %s", c.sourcePos.line, args.trim()));
 
-      updateLinesOfArgs(c.sourcePos.line, args.trim());
+      for (String i : args.trim().split(" ")) {
+        updateLines(c.sourcePos.line, i);
+      }
     }
   }
 
@@ -197,7 +302,8 @@ public class LA extends VInstr.Visitor<Throwable> {
     VMemRef.Global dest = (VMemRef.Global) w.dest;
     System.out.println(String.format("Line %d: %s %s", w.sourcePos.line, dest.base.toString(), w.source.toString()));
 
-    updateLines(w.sourcePos.line, dest.base.toString(), w.source.toString());
+    updateLines(w.sourcePos.line, w.source.toString());
+    queueLines(dest.base.toString());
   }
 
   //
@@ -209,7 +315,8 @@ public class LA extends VInstr.Visitor<Throwable> {
     VMemRef.Global source = (VMemRef.Global) r.source;
     System.out.println(String.format("Line %d: %s %s", r.sourcePos.line, source.base.toString(), r.dest.toString()));
 
-    updateLines(r.sourcePos.line, source.base.toString(), r.dest.toString());
+    updateLines(r.sourcePos.line, source.base.toString());
+    queueLines(r.dest.toString());
   }
 
   //
@@ -220,6 +327,18 @@ public class LA extends VInstr.Visitor<Throwable> {
     System.out.println(String.format("Line %d: %s", b.sourcePos.line, b.value.toString()));
 
     updateLines(b.sourcePos.line, b.value.toString());
+    extendLines(functionName, currentLabel, b.sourcePos.line);
+
+    String label = b.target.toString().substring(1);
+
+    for (Lines l : liveList.get(functionName)) {
+      if (l.labels.contains(currentLabel) && l.alive(b.sourcePos.line)) {
+        if (!liveAtIf.containsKey(label)) {
+          liveAtIf.put(label, new LinkedList<String>());
+        }
+        liveAtIf.get(label).add(l.getVar());
+      }
+    }
   }
 
   //
@@ -228,6 +347,8 @@ public class LA extends VInstr.Visitor<Throwable> {
   public void visit(VGoto g) throws Throwable {
     System.out.print("VGoto     - ");
     System.out.println(String.format("Line %d: Goto", g.sourcePos.line));
+
+    updateLines(g.sourcePos.line);
   }
 
   //
