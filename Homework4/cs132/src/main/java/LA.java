@@ -3,7 +3,7 @@ import cs132.vapor.ast.*;
 import java.util.*;
 
 public class LA extends VInstr.Visitor<Throwable> { 
-  
+
   private RegisterManager RM;
 
   public LA() {
@@ -58,13 +58,14 @@ public class LA extends VInstr.Visitor<Throwable> {
     return this.RM;
   }
 
-  /* 
-      Visitors
-
-      function-local variable (VVarRef.Local) 
-      global register (VVarRef.Register)
-
-  */
+  public Boolean destinationInArgs(String dest, String... args) {
+    for (String i : args) {
+      if (dest.equals(i)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   public void updateLines(Lines line, int lineNum, String mode) {
     if (line != null) {
@@ -84,33 +85,35 @@ public class LA extends VInstr.Visitor<Throwable> {
     }  
   }
 
+  /* 
+      Visitors
+
+      function-local variable (VVarRef.Local) 
+      global register (VVarRef.Register)
+
+  */
+
   public void visit(VAssign a) throws Throwable {
     updateLines(getVar(a.source.toString()), a.sourcePos.line, "save");
 
     Lines l = getVar(a.dest.toString());
     if (l == null) {
-        RM.liveList.add(new Lines(a.dest.toString(), a.sourcePos.line));
-    } else {
+      RM.liveList.add(new Lines(a.dest.toString(), a.sourcePos.line));
+    } 
+    else {
       updateLines(l, a.sourcePos.line, "use");
     }
-
   }
 
   public void visit(VCall c) throws Throwable {
-    String destination = c.dest.ident;
-    boolean dEqualsS = false;
-
     Lines l = getVar(c.addr.toString());
     if (l != null) {
-      if (destination.equals(c.addr.toString()))
-          dEqualsS = true;
-
       updateLines(l, c.sourcePos.line, "save");
     }
 
+    String args = c.addr.toString() + " ";
     for (VOperand operand : c.args) {
-      if (destination.equals(operand.toString()))
-          dEqualsS = true;
+      args += operand.toString() + " ";
 
       updateLines(getVar(operand.toString()), c.sourcePos.line, "save");
     }
@@ -118,44 +121,43 @@ public class LA extends VInstr.Visitor<Throwable> {
     for (Lines li : RM.liveList)
         li.setCall(true);
 
-    if (!dEqualsS) {
-      l = getVar(destination);
+    if (!destinationInArgs(c.dest.ident, args.trim().split(" "))) {
+      l = getVar(c.dest.ident);
       if (l == null) {
-          RM.liveList.add(new Lines(destination, c.sourcePos.line));
-      } else {
-          updateLines(l, c.sourcePos.line, "save");
+        RM.liveList.add(new Lines(c.dest.ident, c.sourcePos.line));
+      } 
+      else {
+        updateLines(l, c.sourcePos.line, "save");
       }
     }
 
     if (c.args.length - 4 > RM.outs) {
       RM.outs = c.args.length - 4;
     }
-
   }
 
   public void visit(VBuiltIn c) throws Throwable {
     String destination = "";
-    boolean dEqualsS = true;;
 
     if (c.dest != null) {
         destination = c.dest.toString();
-        dEqualsS = false;
     }
 
+    String args = "";
     for (VOperand operand : c.args) {
-      if (operand.toString().equals(destination))
-          dEqualsS = true;
+      args += operand.toString() + " ";
 
       updateLines(getVar(operand.toString()), c.sourcePos.line, "save");
     }
 
-    if (!dEqualsS) {
-        Lines l = getVar(destination);
-        if (l == null) {
-            RM.liveList.add(new Lines(destination, c.sourcePos.line));
-        } else {
-            updateLines(l, c.sourcePos.line, "use");
-        }
+    if (!destinationInArgs(destination, args.trim().split(" "))) {
+      Lines l = getVar(destination);
+      if (l == null) {
+        RM.liveList.add(new Lines(destination, c.sourcePos.line));
+      } 
+      else {
+        updateLines(l, c.sourcePos.line, "use");
+      }
     }
   }
 
@@ -172,30 +174,32 @@ public class LA extends VInstr.Visitor<Throwable> {
 
     Lines l = getVar(r.dest.toString());
     if (l == null) {
-        RM.liveList.add(new Lines(r.dest.toString(), r.sourcePos.line));
-    } else {
-        updateLines(l, r.sourcePos.line, "use");
+      RM.liveList.add(new Lines(r.dest.toString(), r.sourcePos.line));
+    } 
+    else {
+      updateLines(l, r.sourcePos.line, "use");
     }
   }
 
   public void visit(VBranch b) throws Throwable {
     for (Lines l : RM.liveList) {
       if (l.labels.contains(b.target.toString().substring(1))) {
-          l.ranges.end = b.sourcePos.line;
-          if (l.getCall())
-              l.setCrossCall(true);
+        l.ranges.end = b.sourcePos.line;
+        if (l.getCall()) {
+          l.setCrossCall(true);
+        }
       }
     }
-
     updateLines(getVar(b.value.toString()), b.sourcePos.line, "save");
   }
 
   public void visit(VGoto g) throws Throwable {
     for (Lines l : RM.liveList) {
       if (l.labels.contains(g.target.toString().substring(1))) {
-          l.ranges.end = g.sourcePos.line;
-          if (l.getCall())
-              l.setCrossCall(true);
+        l.ranges.end = g.sourcePos.line;
+        if (l.getCall()) {
+          l.setCrossCall(true);
+        }
       }
     }
   }
@@ -205,6 +209,5 @@ public class LA extends VInstr.Visitor<Throwable> {
       updateLines(getVar(r.value.toString()), r.sourcePos.line, "save");
     }
   }
-
 
 }
