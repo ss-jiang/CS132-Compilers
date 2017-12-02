@@ -3,16 +3,14 @@ import cs132.vapor.parser.VaporParser;
 import cs132.vapor.ast.VBuiltIn.Op;
 import cs132.vapor.ast.*;
 
-import java.io.InputStreamReader;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.io.InputStream;
-import java.util.LinkedList;
-import java.util.Arrays;
+import java.io.*;
+import java.util.*;
 
 public class V2VM extends VInstr.Visitor<Throwable> { 
 
     public int indent = 0;
+    public int calleeRegisterCount;
+    public HashMap<String, String> registers;
     
     public static void main (String [] args) {
 
@@ -25,24 +23,37 @@ public class V2VM extends VInstr.Visitor<Throwable> {
           System.exit(1);
         }
 
-        LA la = new LA();
-        la.analyze(v);
-
         V2VM v2vm = new V2VM();
         v2vm.printDataSegments(v);
 
         for (VFunction function : v.functions) {
 
-          String params = "";
-          for (VVarRef ident : function.params) {
-            params += ident.toString() + " ";
-          }
+          LA la = new LA();
+          la.analyze(function);                                                
 
-          v2vm.print(String.format("func %s(%s)", function.ident, params.trim()));
+          v2vm.registers = la.getRM().getRegisters();          
+          v2vm.calleeRegisterCount = la.getRM().calleeRegisterCount; 
+
+          int in = function.params.length;
+          v2vm.print(String.format("func %s [in %d, out %d, local %d]", function.ident, (in < 4) ? 0 : in - 4, la.getRM().outs, v2vm.calleeRegisterCount));
           v2vm.indent++;
 
-          LinkedList<VCodeLabel> l = new LinkedList<VCodeLabel>(Arrays.asList(function.labels));
+          for (int i = 0; i < v2vm.calleeRegisterCount && i < 8; i++) {
+            v2vm.print(String.format("local[%d] = $s%d", i, i));
+          }
+          
+          for (int i = 0; i < function.params.length; i++) {
+            String param = v2vm.registers.get(function.params[i].ident);
 
+            if (i < 4) {
+              v2vm.print(String.format("%s = $a%d", param, i));
+            }
+            else {
+              v2vm.print(String.format("%s = in[%d]", param, i - 4));
+            }
+          }
+
+          LinkedList<VCodeLabel> l = new LinkedList<VCodeLabel>(Arrays.asList(function.labels));
           for (VInstr instr : function.body) {
             try {
               v2vm.indent--;
@@ -104,7 +115,7 @@ public class V2VM extends VInstr.Visitor<Throwable> {
 
     public void print(String s, Object... a) {
       StringBuilder output = new StringBuilder();
-      for (int i = 0; i < indent * 2; i++) {
+      for (int i = 0; i < indent; i++) {
             output.append(" ");
       }
       System.out.println(String.format(output + s, a));
@@ -123,9 +134,11 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // a.dest = a.source
     //
     public void visit(VAssign a) throws Throwable {
-      // System.out.println("VAssign");
-    
-      print(a.dest.toString() + " = " + a.source.toString());
+      String s = registers.get(a.source.toString());
+      if (s == null) {
+        s = a.source.toString();
+      }
+      print(String.format("%s = %s", registers.get(a.dest.toString()), s));
     }
 
     //
@@ -133,15 +146,30 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // c.dest = c.addr( c.args )
     //
     public void visit(VCall c) throws Throwable {
-      // System.out.println("VCall");
+      for (int i = 0; i < c.args.length; i++) {
+        String s = registers.get(c.args[i].toString());
+        if ( s == null) {
+          s = c.args[i].toString();
+        }
 
-      String args = "";
-      for (VOperand arg : c.args) {
-        args += arg.toString() + " ";
+        if (i < 4) {
+          print(String.format("$a%d = %s", i, s));
+        }
+        else {
+          print(String.format("out[%d] = %s", i - 4, s));
+        }
       }
 
-      print(String.format("%s = call %s(%s)", c.dest.toString(), c.addr.toString(), args.trim()));
-      
+      String s = registers.get(c.addr.toString());
+      if (s == null) {
+        s = c.addr.toString();
+      }
+
+      print(String.format("call %s", s));
+      if (registers.get(c.dest.toString()) != null) {
+        print(String.format("%s = $v0", registers.get(c.dest.toString())));
+      }
+
     }
 
     //
@@ -149,18 +177,17 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // c.dest = c.op.name( c.args )
     // 
     public void visit(VBuiltIn c) throws Throwable {
-      // System.out.println("VBuiltIn");
-
       String args = "";
       for (VOperand arg : c.args) {
-        args += arg.toString() + " " ;
+        String s = registers.get(arg.toString());
+        args += (s == null ? arg.toString() : s) + " ";
       }
 
       if (c.dest != null) {
-        print(String.format("%s = %s(%s)", c.dest.toString(), c.op.name.toString(), args.trim()));
+        print(String.format("%s = %s(%s)", registers.get(c.dest.toString()), c.op.name.toString(), args.trim()));
       }
       else {
-        print(String.format("%s(%s)", c.op.name.toString(), args.trim()));        
+        print(String.format("%s(%s)", c.op.name.toString(), args.trim()));    
       }
     }
 
@@ -169,15 +196,18 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // w.dest = w.source
     //
     public void visit(VMemWrite w) throws Throwable {
-      // System.out.println("VMemWrite");
+      String s = registers.get(w.source.toString());
+      if (s == null) {
+        s = w.source.toString();
+      }
 
       VMemRef.Global dest = (VMemRef.Global) w.dest;
 
       if (dest.byteOffset == 0) {
-        print(String.format("[%s] = %s", dest.base.toString(), w.source.toString()));      
+        print(String.format("[%s] = %s", registers.get(dest.base.toString()), s));      
       }
       else {
-        print(String.format("[%s+%s] = %s", dest.base.toString(), dest.byteOffset, w.source.toString()));
+        print(String.format("[%s+%s] = %s", registers.get(dest.base.toString()), dest.byteOffset, s));
       }
     }
 
@@ -185,15 +215,13 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // Memory read instructions. Ex: "v = [a+4]"
     //
     public void visit(VMemRead r) throws Throwable {
-      // System.out.println("VMemRead");
-
       VMemRef.Global source = (VMemRef.Global) r.source;
 
       if (source.byteOffset == 0) {
-        print(String.format("%s = [%s]", r.dest.toString(), source.base.toString()));
+        print(String.format("%s = [%s]", registers.get(r.dest.toString()), registers.get(source.base.toString())));
       }
       else {
-        print(String.format("%s = [%s+%s]", r.dest.toString(), source.base.toString(), source.byteOffset));
+        print(String.format("%s = [%s+%s]", registers.get(r.dest.toString()), registers.get(source.base.toString()), source.byteOffset));
       }
 
     }
@@ -202,24 +230,18 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // Branch instruction (if and if0)
     //
     public void visit(VBranch b) throws Throwable {
-      // System.out.println("VBranch");
-
-      indent--;
       if (b.positive) {
-        print(String.format("if %s goto %s", b.value.toString(), b.target.toString()));
+        print(String.format("if %s goto %s", registers.get(b.value.toString()), b.target.toString()));
       }
       else {
-        print(String.format("if0 %s goto %s", b.value.toString(), b.target.toString()));
+        print(String.format("if0 %s goto %s", registers.get(b.value.toString()), b.target.toString()));
       }
-      indent++;
     }
 
     //
     // Jump instruction
     //
     public void visit(VGoto g) throws Throwable {
-      // System.out.println("VGoto");
-
       print(String.format("goto %s", g.target.toString()));
     }
 
@@ -228,15 +250,19 @@ public class V2VM extends VInstr.Visitor<Throwable> {
     // ret *( r.value )*
     //
     public void visit(VReturn r) throws Throwable {
-      // System.out.println("VReturn");
-
       if (r.value != null) {
-        print("ret " + r.value.toString());
-      }
-      else {
-        print("ret");
-      }
-    }
+        String s = registers.get(r.value.toString());
+        if (s == null) {
+          s = r.value.toString();
+        }
 
+        print(String.format("$v0 = %s", s));
+      }
+
+      for (int i = 0; i < calleeRegisterCount && i < 8; i++) {
+        print(String.format("$s%d = local[%d]", i, i));
+      }
+      print("ret");
+    }
 
 }

@@ -2,219 +2,61 @@ import cs132.vapor.ast.*;
 
 import java.util.*;
 
-import javax.net.ssl.ExtendedSSLSession;
-
 public class LA extends VInstr.Visitor<Throwable> { 
-    
-  public String functionName;
-  public String currentLabel;
-  public int labelLine;
-
-  public LinkedList<String> calleeRegisters = new LinkedList<String>();
-  public LinkedList<String> callerRegisters = new LinkedList<String>();
-
-  // Holds function -> label -> (var, line start, line end)
-  public HashMap<String, LinkedList<Lines>> liveList = new HashMap<String, LinkedList<Lines>>();
-
-  // Holds register -> (var, line start, line end)
-  public LinkedHashMap<String, Lines> usedRegisters = new LinkedHashMap<String, Lines>();
-
-  public TreeSet<String> freeRegisters = new TreeSet<String>();
-
-  public LinkedList<String> waitingVars = new LinkedList<String>();
-
-  // Holds label -> list of variables
-  public HashMap<String, LinkedList<String>> liveAtIf = new HashMap<String, LinkedList<String>>(); 
-
-  /*
-      Functions
-  */
+  
+  private RegisterManager RM;
 
   public LA() {
-    currentLabel = null;
-    calleeRegisters.addAll(Arrays.asList("s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"));
-    callerRegisters.addAll(Arrays.asList("t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"));
+    RM = new RegisterManager();
+    RM.callees.addAll(Arrays.asList("$s0", "$s1", "$s2", "$s3", "$s4", "$s5", "$s6", "$s7"));
+    RM.callers.addAll(Arrays.asList("$t0", "$t1", "$t2", "$t3", "$t4", "$t5", "$t6", "$t7", "$t8"));
   } 
 
-  public void analyze(VaporProgram v) {
+  public void analyze(VFunction v) {
 
-    for (VFunction function : v.functions) {
-      System.out.println("Liveness Analysis of function: " + function.ident);
-      
-      if (!this.liveList.containsKey(function.ident)) {
-        this.liveList.put(function.ident, new LinkedList<Lines>());
-      }
-      this.functionName = function.ident;
-      this.currentLabel = function.ident;
-      this.labelLine = function.sourcePos.line;
-
-      // this.liveAtIf.put(this.currentLabel, new LinkedList<String>());
-
-      for (VVarRef ident : function.params) {
-        queueLines(ident.toString());
-
-        // this.liveAtIf.get(this.currentLabel).add(ident.toString());
-      }
-
-
-      LinkedList<VCodeLabel> l = new LinkedList<VCodeLabel>(Arrays.asList(function.labels));
-      for (VInstr instr : function.body) {
-        try {
-          while (!l.isEmpty() && l.peek().sourcePos.line < instr.sourcePos.line) {
-            labelLine = l.peek().sourcePos.line;
-            currentLabel = l.pop().ident;
-          }
-
-          instr.accept(this);
-        }
-        catch (Throwable t) {
-          System.out.println("ERRRR");
-        }
-      }
-      System.out.println("\n");
-
-      CrossCallChecker ccc = new CrossCallChecker();
-      this.liveList = ccc.analyze(v, this.liveList);
-
-      this.PrintLiveIntervals();
-      System.out.println("\n");
+    for (VVarRef ident : v.params) {
+      RM.liveList.add(new Lines(ident.toString(), ident.sourcePos.line));
     }
-  }
 
-  public void extendLines(String fName, String lName, int lNum) {
-    if (liveList.containsKey(fName)) {
-      for (Lines l : liveList.get(fName)) {
-        if (l.labels.contains(lName)) {
-          l.setEnd(lNum);
+    LinkedList<VCodeLabel> l = new LinkedList<VCodeLabel>(Arrays.asList(v.labels));
+    for (VInstr instr : v.body) {
+      try {
+        while (!l.isEmpty() && l.peek().sourcePos.line < instr.sourcePos.line) {
+          String currentLabel = l.pop().ident;
+
+          for (Lines line : RM.liveList) {
+            line.tempLabels.add(currentLabel);
+          }
         }
+        instr.accept(this);
+      }
+      catch (Throwable t) {
       }
     }
   }
 
-  public void queueLines(String... idents) {
-    for (String i : idents) {
-      waitingVars.add(i);
-    }
-  }
+  /*
+      Helper Functions
+  */
 
-  public void updateLines(int lineNum, String... idents) {
-    for (String i : idents) {
-      waitingVars.add(i);
-    }
-
-    for (String i : waitingVars) {
-      Boolean added = false;      
-      if (i.contains("null") || i.contains("pointer") || i.contains(":vmt_") || i.matches("[0-9]+")) {
-        continue;
-      }
-      else {
-        if (liveList.containsKey(functionName)) {
-          for (Lines l : liveList.get(functionName)) {
-            if (l.getVar().equals(i)) {
-              if (!l.labels.contains(currentLabel)) {
-                l.addRange(lineNum);
-                l.labels.add(currentLabel);
-
-                if (liveAtIf.containsKey(currentLabel)) {
-                  for (String s : liveAtIf.get(currentLabel)) {
-                    if (l.getVar().equals(s)) {
-                      l.setStart(labelLine + 1);
-                      liveAtIf.get(currentLabel).remove(s);
-                    }
-                  }
-                }
-                
-              }
-              else {
-                l.setEnd(lineNum);                
-              }
-              added = true;
-
-              // if (l.getCall()) {
-              //   l.setCrossCall(true);
-              // }
-            }
-          }
-          if (!added) {
-            System.out.println(String.format("Adding %s with starting line %d", i, lineNum)); 
-            Lines temp = new Lines(i, lineNum);
-            
-            if (liveAtIf.containsKey(currentLabel)) {
-              for (String s : liveAtIf.get(currentLabel)) {
-                if (i.equals(s)) {
-                  temp.setStart(labelLine + 1);
-                  liveAtIf.get(currentLabel).remove(s);                  
-                }
-              }
-            }
-
-            temp.labels.add(currentLabel);
-            liveList.get(functionName).add(temp);
-          }
-        }
+  public Lines getVar(String var) {
+    for (Lines l : RM.liveList) {
+      if (l.getVar().equals(var)) {
+        return l;
       }
     }
-
-    waitingVars.clear();
+    return null;
   }
 
   public void PrintLiveIntervals() {
-    for (Lines l : liveList.get(functionName)) {
+    for (Lines l : RM.liveList) {
       System.out.println(String.format("'%s' is live from lines %s, Labels: %s, Cross call = %s", l.getVar(), l.printRanges(), l.labels.toString(), l.getCrossCall().toString()));        
     }
   }
 
-  private class SortStart implements Comparator<Lines> {
-    public int compare(Lines l1, Lines l2) {
-      if (l1.getStart() < l2.getStart()) {
-        return -1;
-      }
-      else if (l1.getStart() > l2.getStart()) {
-        return 1;
-      }
-      else {
-        return 0;
-      }
-    }
+  public RegisterManager getRM() {
+    return this.RM;
   }
-
-  private class SortEnd implements Comparator<Lines> {
-    public int compare(Lines l1, Lines l2) {
-      if (l1.getEnd() < l2.getEnd()) {
-        return -1;
-      }
-      else if (l1.getEnd() > l2.getEnd()) {
-        return 1;
-      }
-      else {
-        return 0;
-      }
-    }
-  }
-
-  /*
-      Register managers
-  */
-
-  public void allocateRegisters() {
-    
-  }
-
-  public void deallocateRegisters(Lines l) {
-    for (String r : usedRegisters.keySet()) {
-      if (usedRegisters.get(r).getEnd() < l.getStart()) {
-        usedRegisters.remove(r);
-        freeRegisters.add(r);
-      }
-    }
-  }
-
-
-  private class Var {
-
-  }
-
-
 
   /* 
       Visitors
@@ -224,143 +66,143 @@ public class LA extends VInstr.Visitor<Throwable> {
 
   */
 
-  //
-  // Assignment instruction. This is only used for assignments of simple operands to registers and local variables.
-  // a.dest = a.source
-  //
+  public void updateLines(Lines line, int lineNum, String mode) {
+    if (line != null) {
+      if (mode.equals("save")) {
+        line.ranges.end = lineNum;
+        line.labels.addAll(line.tempLabels);
+        line.tempLabels.clear();
+        if (line.getCall()) {
+          line.setCrossCall(true);
+        }
+      }
+
+      if (mode.equals("use")) {
+        line.ranges.end = lineNum;
+        line.tempLabels.clear();
+      }  
+    }  
+  }
+
   public void visit(VAssign a) throws Throwable {
-    System.out.print("VAssign   - ");
-    System.out.println(String.format("Line %d: %s %s", a.dest.sourcePos.line, a.dest.toString(), a.source.toString()));
+    updateLines(getVar(a.source.toString()), a.sourcePos.line, "save");
 
-    queueLines(a.dest.toString());
+    Lines l = getVar(a.dest.toString());
+    if (l == null) {
+        RM.liveList.add(new Lines(a.dest.toString(), a.sourcePos.line));
+    } else {
+      updateLines(l, a.sourcePos.line, "use");
+    }
+
   }
 
-  //
-  // Call, function 
-  // c.dest = c.addr( c.args )
-  //
   public void visit(VCall c) throws Throwable {
-    System.out.print("VCall     - ");
+    String destination = c.dest.ident;
+    boolean dEqualsS = false;
 
-    String args = "";
-    for (VOperand arg : c.args) {
-      args += arg.toString() + " ";
+    Lines l = getVar(c.addr.toString());
+    if (l != null) {
+      if (destination.equals(c.addr.toString()))
+          dEqualsS = true;
+
+      updateLines(l, c.sourcePos.line, "save");
     }
 
-    System.out.println(String.format("Line %d: %s %s %s", c.sourcePos.line, c.dest.toString(), c.addr.toString(), args.trim()));
-    
-    updateLines(c.sourcePos.line, c.addr.toString());
-    for (String i : args.trim().split(" ")) {
-      updateLines(c.sourcePos.line, i);
+    for (VOperand operand : c.args) {
+      if (destination.equals(operand.toString()))
+          dEqualsS = true;
+
+      updateLines(getVar(operand.toString()), c.sourcePos.line, "save");
     }
 
-    queueLines(c.dest.toString());
+    for (Lines li : RM.liveList)
+        li.setCall(true);
 
-    // for (Lines l : liveList.get(functionName)) {
-    //   if (l.labels.contains(currentLabel) && l.getStart() < c.sourcePos.line) {
-    //     l.setCall(true);        
-    //   }
-    // }
+    if (!dEqualsS) {
+      l = getVar(destination);
+      if (l == null) {
+          RM.liveList.add(new Lines(destination, c.sourcePos.line));
+      } else {
+          updateLines(l, c.sourcePos.line, "save");
+      }
+    }
+
+    if (c.args.length - 4 > RM.outs) {
+      RM.outs = c.args.length - 4;
+    }
+
   }
 
-  //
-  // Built-in operation (Add, Sub, MulS, etc.)
-  // c.dest = c.op.name( c.args )
-  // 
   public void visit(VBuiltIn c) throws Throwable {
-    System.out.print("VBuiltIn  - ");
-        
-    String args = "";
-    for (VOperand arg : c.args) {
-      args += arg.toString() + " " ;
-    }
-    
+    String destination = "";
+    boolean dEqualsS = true;;
+
     if (c.dest != null) {
-      System.out.println(String.format("Line %d: %s %s", c.sourcePos.line, c.dest.toString(), args.trim()));
-
-      for (String i : args.trim().split(" ")) {
-        updateLines(c.sourcePos.line, i);
-      }
-      queueLines(c.dest.toString());
+        destination = c.dest.toString();
+        dEqualsS = false;
     }
-    else {
-      System.out.println(String.format("Line %d: %s", c.sourcePos.line, args.trim()));
 
-      for (String i : args.trim().split(" ")) {
-        updateLines(c.sourcePos.line, i);
-      }
+    for (VOperand operand : c.args) {
+      if (operand.toString().equals(destination))
+          dEqualsS = true;
+
+      updateLines(getVar(operand.toString()), c.sourcePos.line, "save");
+    }
+
+    if (!dEqualsS) {
+        Lines l = getVar(destination);
+        if (l == null) {
+            RM.liveList.add(new Lines(destination, c.sourcePos.line));
+        } else {
+            updateLines(l, c.sourcePos.line, "use");
+        }
     }
   }
 
-  //
-  // Memory write instruction. Ex: "[a+4] = v".
-  // w.dest = w.source
-  //
-  public void visit(VMemWrite w) throws Throwable {
-    System.out.print("VMemWrite - ");
+  public void visit(VMemWrite w) throws Throwable {    
+    updateLines(getVar(w.source.toString()), w.sourcePos.line, "save");
 
     VMemRef.Global dest = (VMemRef.Global) w.dest;
-    System.out.println(String.format("Line %d: %s %s", w.sourcePos.line, dest.base.toString(), w.source.toString()));
-
-    updateLines(w.sourcePos.line, w.source.toString());
-    queueLines(dest.base.toString());
+    updateLines(getVar(dest.base.toString()), w.sourcePos.line, "save");              
   }
 
-  //
-  // Memory read instructions. Ex: "v = [a+4]"
-  //
   public void visit(VMemRead r) throws Throwable {
-    System.out.print("VMemRead  - ");
+    VMemRef.Global src = (VMemRef.Global) r.source;
+    updateLines(getVar(src.base.toString()), r.sourcePos.line, "save");
 
-    VMemRef.Global source = (VMemRef.Global) r.source;
-    System.out.println(String.format("Line %d: %s %s", r.sourcePos.line, source.base.toString(), r.dest.toString()));
-
-    updateLines(r.sourcePos.line, source.base.toString());
-    queueLines(r.dest.toString());
+    Lines l = getVar(r.dest.toString());
+    if (l == null) {
+        RM.liveList.add(new Lines(r.dest.toString(), r.sourcePos.line));
+    } else {
+        updateLines(l, r.sourcePos.line, "use");
+    }
   }
 
-  //
-  // Branch instruction (if and if0)
-  //
   public void visit(VBranch b) throws Throwable {
-    System.out.print("VBranch   - ");
-    System.out.println(String.format("Line %d: %s", b.sourcePos.line, b.value.toString()));
+    for (Lines l : RM.liveList) {
+      if (l.labels.contains(b.target.toString().substring(1))) {
+          l.ranges.end = b.sourcePos.line;
+          if (l.getCall())
+              l.setCrossCall(true);
+      }
+    }
 
-    updateLines(b.sourcePos.line, b.value.toString());
-    extendLines(functionName, currentLabel, b.sourcePos.line);
+    updateLines(getVar(b.value.toString()), b.sourcePos.line, "save");
+  }
 
-    String label = b.target.toString().substring(1);
-
-    for (Lines l : liveList.get(functionName)) {
-      if (l.labels.contains(currentLabel) && l.alive(b.sourcePos.line)) {
-        if (!liveAtIf.containsKey(label)) {
-          liveAtIf.put(label, new LinkedList<String>());
-        }
-        liveAtIf.get(label).add(l.getVar());
+  public void visit(VGoto g) throws Throwable {
+    for (Lines l : RM.liveList) {
+      if (l.labels.contains(g.target.toString().substring(1))) {
+          l.ranges.end = g.sourcePos.line;
+          if (l.getCall())
+              l.setCrossCall(true);
       }
     }
   }
 
-  //
-  // Jump instruction
-  //
-  public void visit(VGoto g) throws Throwable {
-    System.out.print("VGoto     - ");
-    System.out.println(String.format("Line %d: Goto", g.sourcePos.line));
-
-    updateLines(g.sourcePos.line);
-  }
-
-  //
-  // Return instruction
-  // ret *( r.value )*
-  //
   public void visit(VReturn r) throws Throwable {
-    System.out.print("VReturn   - ");
-
     if (r.value != null) {
-      System.out.println(String.format("Line %d: %s", r.sourcePos.line, r.value.toString()));
-      updateLines(r.sourcePos.line, r.value.toString());
+      updateLines(getVar(r.value.toString()), r.sourcePos.line, "save");
     }
   }
 

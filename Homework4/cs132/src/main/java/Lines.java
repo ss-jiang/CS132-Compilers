@@ -1,5 +1,4 @@
 import java.util.*;
-import java.lang.*;
 
 public class Lines { 
 
@@ -18,30 +17,28 @@ public class Lines {
     private Boolean call;
     private Boolean crossCall;
     
-    // public HashSet<String> tempLabels = new HashSet<String>();
+    public HashSet<String> tempLabels = new HashSet<String>();
     public HashSet<String> labels = new HashSet<String>();
 
-    public LinkedList<Range> ranges = new LinkedList<Range>();
+    // public LinkedList<Range> ranges = new LinkedList<Range>();
 
-    // private int start;
-    // private int end;
+    public Range ranges; 
 
     public Lines(String var, int start) {
       this.var = var;
 
-      ranges.add(new Range(start));
-      // this.start = start;
-      // this.end = end;
+      ranges = new Range(start);
+
       this.call = false;
       this.crossCall = false;
     }
     
     public void setStart(int start) {
-      ranges.getLast().start = start;
+      ranges.start = start;
     }
 
     public void setEnd(int end) {
-      ranges.getLast().end = end;
+      ranges.end = end;
       // this.end = end;
     }
 
@@ -58,11 +55,11 @@ public class Lines {
     }
 
     public int getStart() {
-      return ranges.getLast().start;
+      return ranges.start;
     }
 
     public int getEnd() {
-      return ranges.getLast().end;
+      return ranges.end;
     }
 
     public Boolean getCall() {
@@ -73,30 +70,35 @@ public class Lines {
       return this.crossCall;
     }
 
-    // public String getInterval() {
-    //   return String.format("%d - %d", this.start, this.end);
-    // }
-
-    public void addRange(int start) {
-      Range r = new Range(start);
-      ranges.add(r);
-    }
-
     public String printRanges() {
       StringBuilder s = new StringBuilder();
 
-      for (Range r : ranges) {
-        s.append(String.format("%d - %d, ", r.start, r.end));
-      }
+      // for (Range r : ranges) {
+      s.append(String.format("%d - %d", ranges.start, ranges.end));
+      // }
 
       return s.toString();
     }
 
     public Boolean alive(int lineNum){
-      if (ranges.getLast().end <= lineNum) {
+      if (ranges.end <= lineNum) {
         return true;
       }
       return false;
+    }
+
+    public void save(int lineNum) {
+      ranges.end = lineNum;
+      labels.addAll(tempLabels);
+      tempLabels.clear();
+      if (call) {
+        crossCall = true;
+      }
+    }
+
+    public void use(int lineNum) {
+      ranges.end = lineNum;
+      tempLabels.clear();
     }
 
 }
